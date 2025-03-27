@@ -1,0 +1,36 @@
+name: Run main.py
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Runs daily at 8 AM MYT (UTC+8)
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  run-python-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || echo "No dependencies"
+          pip install cryptography
+
+      - name: Create Google Sheets credentials file
+        env:
+          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        run: echo "$GCP_SERVICE_ACCOUNT_KEY" > /tmp/gcp_credentials.json
+
+      - name: Run main.py
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_credentials.json
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          PROXY_HTTP: ${{ secrets.PROXY_HTTP }}
+          PROXY_HTTPS: ${{ secrets.PROXY_HTTPS }}
+        run: python main.py
