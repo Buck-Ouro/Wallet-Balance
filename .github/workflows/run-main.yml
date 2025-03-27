@@ -3,7 +3,6 @@ name: Run main.py
 on:
   schedule:
     - cron: '* * * * *'  # Runs daily at 8 AM MYT (UTC+8)
-  workflow_dispatch:  # Allows manual triggering
 
 jobs:
   run-python-script:
