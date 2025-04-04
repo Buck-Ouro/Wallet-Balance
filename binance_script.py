@@ -132,11 +132,13 @@ class BinanceAPI:
         account_data = response.json()
         balances = {b["asset"]: float(b["free"]) for b in account_data["balances"] if float(b["free"]) > 0}
         
-        # Calculate total USD value
+        # Calculate total USD value and get BTC amount
         total = 0.0
+        btc_amount = balances.get("BTC", 0.0)
+        
         for asset, amount in balances.items():
             total += amount * self._get_price(asset)
-        return total
+        return total, btc_amount
 
     @retry_api()
     def get_futures_equity(self):
@@ -158,8 +160,14 @@ class BinanceAPI:
         return float(account_data["totalWalletBalance"]) + float(account_data["totalCrossUnPnl"])
 
 @retry_api(max_retries=2, initial_delay=3)
-def update_sheet(sheet, row_index, value):
-    sheet.update(f"A{row_index}", [[f"${value:,.2f}"]])
+def update_sheet(sheet, row_index, total_value, btc_amount):
+    sheet.batch_update([{
+        'range': f"A{row_index}",
+        'values': [[f"${total_value:,.2f}"]]
+    }, {
+        'range': f"E{row_index}",
+        'values': [[btc_amount]]
+    }])
 
 def main():
     try:
@@ -186,11 +194,11 @@ def main():
                     {"http": os.getenv("PROXY_HTTP"), "https": os.getenv("PROXY_HTTPS")}
                 )
 
-                spot = api.get_spot_balances()
+                spot_total, btc_amount = api.get_spot_balances()
                 futures = api.get_futures_equity()
-                update_sheet(sheet, row_index, spot + futures)
+                update_sheet(sheet, row_index, spot_total + futures, btc_amount)
 
-                logging.info(f"Processed row {row_index}: ${spot + futures:,.2f} (Spot: ${spot:,.2f}, Futures: ${futures:,.2f})")
+                logging.info(f"Processed row {row_index}: ${spot_total + futures:,.2f} (Spot: ${spot_total:,.2f}, Futures: ${futures:,.2f}, BTC: {btc_amount:.8f})")
                 time.sleep(1)  # Row processing delay
 
             except Exception as e:
