@@ -187,6 +187,10 @@ def main():
         rows = sheet.get_all_values()
 
         for row_index, row in enumerate(rows[1:], start=2):
+            spot_total = 0.0
+            btc_amount = 0.0
+            futures = 0.0
+
             try:
                 api = BinanceAPI(
                     decrypt(row[1], dec_key),
@@ -194,15 +198,27 @@ def main():
                     {"http": os.getenv("PROXY_HTTP"), "https": os.getenv("PROXY_HTTPS")}
                 )
 
-                spot_total, btc_amount = api.get_spot_balances()
-                futures = api.get_futures_equity()
-                update_sheet(sheet, row_index, spot_total + futures, btc_amount)
+                try:
+                    spot_total, btc_amount = api.get_spot_balances()
+                except Exception as e:
+                    logging.warning(f"Row {row_index} - Spot balance fetch failed: {e}")
 
-                logging.info(f"Processed row {row_index}: ${spot_total + futures:,.2f} (Spot: ${spot_total:,.2f}, Futures: ${futures:,.2f}, BTC: {btc_amount:.8f})")
+                try:
+                    futures = api.get_futures_equity()
+                except Exception as e:
+                    logging.warning(f"Row {row_index} - Futures equity fetch failed: {e}")
+
+                total_value = spot_total + futures
+                update_sheet(sheet, row_index, total_value, btc_amount)
+
+                logging.info(
+                    f"Processed row {row_index}: "
+                    f"${total_value:,.2f} (Spot: ${spot_total:,.2f}, Futures: ${futures:,.2f}, BTC: {btc_amount:.8f})"
+                )
                 time.sleep(1)  # Row processing delay
 
             except Exception as e:
-                logging.error(f"Row {row_index} failed: {str(e)}")
+                logging.error(f"Row {row_index} failed to initialize or decrypt: {e}")
 
     except Exception as e:
         logging.error(f"Script failed: {str(e)}")
