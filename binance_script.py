@@ -1,6 +1,5 @@
 import os
 import time
-import random
 import logging
 import requests
 import gspread
@@ -20,9 +19,6 @@ logging.basicConfig(
 # Configuration
 BASE_URL = "https://api.binance.com"
 FUTURES_URL = "https://fapi.binance.com"
-MAX_API_RETRIES = 3
-INITIAL_RETRY_DELAY = 5
-BACKOFF_FACTOR = 2
 
 def decrypt(encrypted_text, key):
     """Decrypt encrypted text using Fernet symmetric encryption"""
@@ -46,27 +42,22 @@ def validate_environment():
             f"Credentials file not found at {os.getenv('GCP_CREDENTIALS_PATH')}"
         )
 
-def retry_api(max_retries=MAX_API_RETRIES, initial_delay=INITIAL_RETRY_DELAY):
+def retry_api():
+    """Retry decorator - retries once after 2 seconds on failure"""
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            retries = 0
-            last_exception = None
-            while retries <= max_retries:
+            try:
+                return func(*args, **kwargs)
+            except (requests.exceptions.RequestException, 
+                   gspread.exceptions.APIError) as e:
+                logging.warning(f"Retry in 2s for {func.__name__}")
+                time.sleep(2)
                 try:
                     return func(*args, **kwargs)
-                except (requests.exceptions.RequestException, 
-                       gspread.exceptions.APIError) as e:
-                    retries += 1
-                    if retries > max_retries:
-                        logging.error(f"Max retries reached for {func.__name__}")
-                        raise last_exception or e
-                    delay = initial_delay * (BACKOFF_FACTOR ** (retries - 1))
-                    jitter = random.uniform(0.8, 1.2)
-                    sleep_time = delay * jitter
-                    logging.warning(f"Retry {retries}/{max_retries} in {sleep_time:.1f}s")
-                    time.sleep(sleep_time)
-                    last_exception = e
+                except Exception as retry_error:
+                    logging.error(f"Retry failed for {func.__name__}")
+                    raise retry_error
         return wrapper
     return decorator
 
@@ -142,7 +133,7 @@ class BinanceAPI:
 
     @retry_api()
     def get_futures_equity(self):
-        """Fetch futures account equity from Binance"""
+        """Fetch futures account equity from Binance (includes unrealized PnL)"""
         timestamp = str(int(time.time() * 1000))
         query_string = f"timestamp={timestamp}"
         signature = self._create_signature(query_string)
@@ -157,9 +148,10 @@ class BinanceAPI:
         response.raise_for_status()
         
         account_data = response.json()
+        # This includes unrealized PnL (totalCrossUnPnl)
         return float(account_data["totalWalletBalance"]) + float(account_data["totalCrossUnPnl"])
 
-@retry_api(max_retries=2, initial_delay=3)
+@retry_api()
 def update_sheet(sheet, row_index, total_value, btc_amount):
     sheet.batch_update([{
         'range': f"A{row_index}",
