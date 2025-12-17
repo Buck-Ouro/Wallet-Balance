@@ -3,6 +3,7 @@ name: Wallet Balance Extraction
 on:
   schedule:
     - cron: '45 23 * * *'  # Runs daily at 7:45 AM (UTC+8)
+  workflow_dispatch:
 
 jobs:
   run-scripts:
