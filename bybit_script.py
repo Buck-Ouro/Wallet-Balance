@@ -9,7 +9,7 @@ import hmac
 import hashlib
 from functools import wraps
 from cryptography.fernet import Fernet
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # Logging setup - only INFO level messages and above
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -127,16 +127,21 @@ def calculate_total_value(balances, prices):
 
 @retry_api(max_retries=2, initial_delay=3)
 def update_sheet(sheet, row_index, value):
-    sheet.update(range_name=f"A{row_index}", values=[[f"${value:,.2f}"]])
+    sheet.update(range_name=f"A{row_index}", values=[[round(value, 2)]])
 
 def main():
     try:
         validate_environment()
 
         # Initialize clients
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
+        SCOPES = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        creds = Credentials.from_service_account_file(
             os.getenv("GCP_CREDENTIALS_PATH"),
-            ["https://spreadsheets.google.com/feeds"]
+            scopes=SCOPES
         )
         sheet = gspread.authorize(creds).open_by_key(os.getenv("SHEET_ID")).worksheet(os.getenv("SHEET_NAME", "Sheet2"))
         rows = sheet.get_all_values()
