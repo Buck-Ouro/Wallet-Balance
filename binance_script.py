@@ -7,7 +7,7 @@ import hmac
 import hashlib
 from functools import wraps, lru_cache
 from cryptography.fernet import Fernet
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # Logging setup
 logging.basicConfig(
@@ -155,7 +155,7 @@ class BinanceAPI:
 def update_sheet(sheet, row_index, total_value, btc_amount):
     sheet.batch_update([{
         'range': f"A{row_index}",
-        'values': [[f"${total_value:,.2f}"]]
+        'values': [[total_value]]
     }, {
         'range': f"E{row_index}",
         'values': [[btc_amount]]
@@ -166,10 +166,16 @@ def main():
         validate_environment()
         
         # Initialize clients
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
+        # Scopes for Google Sheets and Drive API
+        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+        
+        # Load credentials
+        creds = Credentials.from_service_account_file(
             os.getenv("GCP_CREDENTIALS_PATH"),
-            ["https://spreadsheets.google.com/feeds"]
+            scopes=SCOPES
         )
+        
+        # Authorize gspread with new credentials
         sheet = gspread.authorize(creds).open_by_key(
             os.getenv("SHEET_ID")
         ).worksheet(os.getenv("SHEET_NAME", "Sheet1"))
